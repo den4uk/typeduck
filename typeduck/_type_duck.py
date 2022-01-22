@@ -11,7 +11,6 @@ class TypeDuck:
     """
     source: typing.Any
     target: typing.Any
-    is_valid: bool = field(default=None, init=False)
 
     def validate(self, raises: bool = False) -> bool:
         """
@@ -29,11 +28,10 @@ class TypeDuck:
         src = _AnnotationMeta(self.source)
         trg = _AnnotationMeta(self.target)
         try:
-            self.is_valid = self._validate(src, trg)
-            return self.is_valid
+            return self._validate(src, trg)
         except TypeError as exc:
             if raises:
-                raise exc
+                raise TypeError(f'{self} was not able to validate.') from exc
             return False
 
     @classmethod
@@ -43,7 +41,7 @@ class TypeDuck:
             or cls._validate_with_optionals(src, trg, **kwargs)
             or cls._validate_with_unions(src, trg, **kwargs)
             or cls._validate_objects(src, trg, **kwargs)
-            or cls._validation_failed(src, trg, **kwargs)
+            or cls._validation_failed()
         )
 
     @classmethod
@@ -96,9 +94,9 @@ class TypeDuck:
                 return True
         return False
 
-    @classmethod
-    def _validation_failed(cls, src, trg, **kwargs):
-        raise TypeError(f'{cls.__name__} was not able to validate {src} and {trg}')
+    @staticmethod
+    def _validation_failed():
+        raise TypeError('End of available validations was reached')
 
 
 @dataclass
