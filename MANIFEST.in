@@ -1,0 +1,7 @@
+include README.md
+global-exclude env
+global-exclude .coverage
+global-exclude htmlcov
+global-exclude __pycache__
+global-exclude .git/
+global-exclude *.py[cod]
