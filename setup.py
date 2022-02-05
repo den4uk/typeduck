@@ -16,7 +16,7 @@ setup(
     url="https://github.com/den4uk/typeduck",
     license='MIT License',
     python_requires=">=3.8",
-    keywords="typing annotations match check compare validate".split(),
+    keywords="typing annotations match check compare validate validation".split(),
     long_description=long_description,
     long_description_content_type="text/markdown",
     classifiers=[

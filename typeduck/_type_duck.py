@@ -1,3 +1,4 @@
+import types
 import typing
 import itertools
 import contextlib
@@ -17,13 +18,14 @@ class TypeDuck:
         Validates the combination of annotations for their compatibility.
 
         Args:
-            raises: optional, when True raises TypeError
+            source: annotation value that is an input for the target
+            target: annotation value to compatibility with the source
 
         Returns:
             bool: when the source and target match
 
         Raises:
-            TypeError: when mismatch happens; toggled by `raises` argument
+            TypeError: when mismatch happens; toggled by `raises` argument when set to True
         """
         src = _AnnotationMeta(self.source)
         trg = _AnnotationMeta(self.target)
@@ -31,7 +33,7 @@ class TypeDuck:
             return self._validate(src, trg)
         except TypeError as exc:
             if raises:
-                raise TypeError(f'{self} was not able to validate.') from exc
+                raise TypeError(f'{self.source} does not validate with {self.target}') from exc
             return False
 
     @classmethod
@@ -54,13 +56,13 @@ class TypeDuck:
 
     @classmethod
     def _validate_with_optionals(cls, src, trg, **kwargs) -> bool:
-        modified = [False, False]
+        modified = False
         if src.is_optional and src.is_union and src.children:
-            modified[0] = src = src.children[0]
+            modified = src = src.children[0]
             src.is_optional = True
         if trg.is_optional and trg.is_union and trg.children:
-            modified[1] = trg = trg.children[0]
-        if any(modified):
+            modified = trg = trg.children[0]
+        if modified:
             return cls._validate(src, trg, **kwargs)
         return False
 
@@ -115,8 +117,15 @@ class _AnnotationMeta:
     children: typing.List = field(default_factory=list, init=False)
 
     _TYPING_GENERIC_TYPES = None
+    _BUILTIN_DATA_STRUCTURES_MAP = {
+        list: typing.List,
+        set: typing.Set,
+        dict: typing.Dict,
+        tuple: typing.Tuple,
+    }
 
     def __post_init__(self):
+        self._is_builtin_data_structure()
         if self._is_typing_class_test():
             if not self._is_any_test():
                 self._is_union_test()
@@ -131,29 +140,40 @@ class _AnnotationMeta:
                 'GenericAlias', '_GenericAlias',
                 '_SpecialForm', '_SpecialGenericAlias',
             )
+            types_class_names = (
+                'UnionType', 'GenericAlias'
+            )
             self._TYPING_GENERIC_TYPES = tuple(
                 getattr(typing, name)
                 for name in typing_class_names
                 if hasattr(typing, name)
+            ) + tuple(
+                getattr(types, name)
+                for name in types_class_names
+                if hasattr(types, name)
             )
         return self._TYPING_GENERIC_TYPES
+
+    def _is_builtin_data_structure(self) -> None:
+        if typing_match := self._BUILTIN_DATA_STRUCTURES_MAP.get(self.t):
+            self.t = typing_match
 
     def _is_typing_class_test(self) -> bool:
         self.is_typing = isinstance(self.t, self._typing_generic_types)
         return self.is_typing
 
     def _is_union_test(self) -> bool:
-        self.is_union = self.origin == typing.Union
+        self.is_union = (self.origin == typing.Union) or (self.t.__class__ == getattr(types, 'UnionType', None))
         return self.is_union
 
     def _is_optional_test(self) -> bool:
-        self.is_optional = self.is_union and self.args and type(None) in self.args
+        self.is_optional = self.is_union and self.args and None.__class__ in self.args
         return self.is_optional
 
     def _is_any_test(self) -> bool:
         self.is_any = self.t == typing.Any
         if not self.is_any:
-            self.origin = self.t.__origin__
+            self.origin = getattr(self.t, '__origin__', None)
         return self.is_any
 
     def _has_args_test(self) -> bool:
@@ -163,8 +183,12 @@ class _AnnotationMeta:
 
     def _process_children(self):
         for arg in self.args:
-            if not isinstance(arg, type(None)):
+            if not isinstance(arg, None.__class__):
                 self.children.append(self.__class__(arg))
 
     def __iter__(self):
         yield from self.children
+
+
+def types_validate(source: typing.Any, target: typing.Any, **kwargs: typing.Any) -> bool:
+    return TypeDuck(source, target).validate(**kwargs)
